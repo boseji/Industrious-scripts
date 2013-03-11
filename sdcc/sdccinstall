@@ -1,0 +1,121 @@
+#!/bin/bash
+# Shell script to install the SDCC compiler
+# Written by Abhijit Bose <info@adharlabs.in>, released as-is in public domain.
+# A.D.H.A.R Labs Research, Bharat (India)
+# http://adharlabs.in
+# http://m8051.blogspot.com 
+#
+# Version:
+#  0.0 - Initial Version Release
+
+echo
+echo Going to the Correct Directory
+echo "In :`pwd`"
+echo
+# Go to $HOME
+cd
+
+# Check for local dir
+cd local
+
+# if local doesnot exist create one
+if [ $? -ne 0 ];then
+echo
+echo Since local did not exist so creating ~/local for installation
+mkdir local
+cd local
+fi
+# Remove the Local things if they exist
+echo
+echo "Performing Pre Build Clean-up"
+echo "In :`pwd`"
+rm -rf sdcc-src-3.2.0.tar.bz2
+rm -rf sdcc SDCC
+
+# Set Error Exit
+set -e
+
+# Download the source package for SDCC
+echo
+echo Now we are going to download th source archive
+echo "In :`pwd`"
+echo Press enter key to continue or CTRL+C to exit...
+read
+wget http://downloads.sourceforge.net/project/sdcc/sdcc/3.2.0/sdcc-src-3.2.0.tar.bz2
+
+# Extract the Package
+echo 
+echo Extracting Files
+echo "In :`pwd`"
+echo
+tar -jxvf sdcc-src-3.2.0.tar.bz2
+
+# Go the Buld Directory
+echo
+echo Entering Build Directory
+cd sdcc
+mkdir build
+cd build
+echo "In :`pwd`"
+
+# Download the Dependencies if required as ask from the user for permission
+echo
+echo Now goining to download 60+MB of data incase the libs are not available
+echo you would now need to give the root password to install the additional packages
+echo incase this fails you can manually install the required packages
+echo "In :`pwd`"
+echo Press enter key to continue or CTRL+C to exit...
+read
+sudo apt-get install libboost-graph-dev
+
+# Configure the build and disable propitory ports
+echo
+echo Configuring the Package
+echo "In :`pwd`"
+echo
+../configure --prefix=$HOME/local/SDCC --disable-pic14-port --disable-pic16-port
+
+# Warn the User that a long time process is going to to Start
+echo
+echo Now we will be building the SDCC compiler 
+echo Its a long time taking task - so enjoy a break
+echo "In :`pwd`"
+echo Press enter key to continue or CTRL+C to exit...
+read
+make
+
+# Ask user for installation
+echo
+echo The build of SDCC is ready and now we can install the package
+echo "In :`pwd`"
+echo Press enter key to continue or CTRL+C to exit...
+read
+make install
+
+# go back to Local
+cd ../..
+# Add to path
+echo
+echo "Configuring the PATH"
+echo "In :`pwd`"
+echo "export PATH=\$PATH:\$HOME/local/SDCC/bin" >> ~/.bashrc
+# remove the remaining things
+echo
+echo Performing Post Build Clean-up
+echo "In :`pwd`"
+echo
+rm -rf sdcc-src-3.2.0.tar.bz2
+rm -rf sdcc
+
+# Tell the user to reboot
+echo
+echo Now the SDCC has been installed
+echo You need to restart the terminal and restart the terminal window again
+echo to get the new parth updated
+echo
+echo All Done !!
+echo 
+echo This script was brought to you by: 
+echo "A.D.H.A.R Labs Reaearch, Bharat (India)"
+echo http://adharlabs.in
+echo http://m8051.blogspot.com 
