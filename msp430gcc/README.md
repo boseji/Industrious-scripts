@@ -1,4 +1,4 @@
-MDP430-GCC-BUILD
+MSP430-GCC-BUILD
 ================
 
 This script helps to install the latest version of the MSP430 GCC compiler as well as LTS releases.
