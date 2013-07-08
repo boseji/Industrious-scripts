@@ -1,0 +1,421 @@
+#!/bin/bash
+# Shell script to Create the MSPGCC compiler and mspdebug
+# Written by Abhijit Bose <info@adharlabs.in>, released as-is in public domain.
+# A.D.H.A.R Labs Research, Bharat (India)
+# http://adharlabs.in
+# http://m8051.blogspot.com 
+#
+# Version:
+#  0.0 - Initial Version Release
+
+# Setup Constants with latest values
+build_dependencies="gcc g++ make gcc-4.6-base sed bison automake gawk mawk libusb-1.0.0 libusb-1.0.0-dev libreadline6-dev bzip2"
+
+mspgcc="mspgcc-20120911"
+mspgcc_linkpref="DEVEL-4.7.x/$mspgcc.tar.bz2"
+msp430headers="msp430mcu-20130321"
+msp430libc="msp430-libc-20120716"
+gnugcc="gcc-4.7.0"
+gnugcc_patch="msp430-gcc-4.7.0-20120911.patch"
+gnugcc_patch_linkpref="$gnugcc/$gnugcc_patch"
+gnubinutils="binutils-2.22"
+gnubinutils_patch="msp430-binutils-2.22-20120911.patch"
+gnubinutils_patch_linkpref="$gnubinutils/$gnubinutils_patch"
+gnugdb="gdb-7.2a"
+gnugdb_patch="msp430-gdb-7.2a-20111205.patch"
+gnugdb_patch_linkpref="$gnudgb/$gnudgb_patch"
+mspdebug="mspdebug-0.21"
+
+# Setup Constants for the LTS release values
+LTS_mspgcc="mspgcc-20120406"
+LTS_mspgcc_linkpref="$LTS_mspgcc.tar.bz2"
+LTS_msp430headers="msp430mcu-20120406"
+LTS_msp430libc="msp430-libc-20120224" 
+LTS_gnugcc="gcc-4.6.3"
+LTS_gnubinutils="binutils-2.21.1a"
+LTS_gnugdb="gdb-7.2a"
+
+# Set Error Exit
+set -e
+
+# Check if we are invoked in the correct directory
+if [ -e msp430gccbuild ]; then
+echo "ok"
+else
+echo "Please run the MSP430GCC build program in the correct directroy..."
+exit 1
+fi
+
+# Take User Inputs
+echo
+echo "Do you wish to load compile time dependencies (y/n)?"
+echo " ( without these dependecies installed there might be issues in compilation )"
+read ch
+buildtime=0
+case "$ch" in
+  y | Y | yes | Yes | YES)
+      buildtime=1
+      ;;
+esac
+
+echo
+echo "Do you wish to install the latest MSP430header and Libc (y/n)?"
+read ch
+headerlatest=0
+case "$ch" in
+  y | Y | yes | Yes | YES)
+      headerlatest=1
+      ;;
+esac
+
+echo
+echo "Do you wish to build for LTS (y/n)? [Else the Latest would be built]"
+read ch
+lts=0
+case "$ch" in
+  y | Y | yes | Yes | YES)
+      lts=1
+      ;;
+esac
+
+useltsheaders=0
+if [ $lts -eq 1 ]; then
+    echo
+    echo "Do you wish to build with LTS recommended MSP430 Headers and libc (y/n)? [Else the Latest would be used]"
+    read ch
+    case "$ch" in
+      y | Y | yes | Yes | YES)
+          useltsheaders=1
+          ;;
+    esac
+fi
+
+updatepatches=0
+#echo
+#echo "Do you wish to use the latest patches (y/n)? [Else the default would be used]"
+#read ch
+#case "$ch" in
+#  y | Y | yes | Yes | YES)
+#      updatepatches=1
+#      ;;
+#esac
+
+installtarget="${HOME}/local/msp430gccinstall"
+echo 
+echo "Enter the compiler installation directory($installtarget): "
+read ch
+if [ -n "$ch" ]; then
+   installtarget=$ch
+fi
+if [ -d $installtarget ]; then
+    echo "Directory Exitsts"
+else
+    mkdir -vp $installtarget
+fi
+
+# Create the Required Process Vars 
+if [ $lts -eq 1 ];then
+    mspgcc=$LTS_mspgcc
+    mspgcc_linkpref=$LTS_mspgcc_linkpref
+    gnugcc=$LTS_gnugcc
+    gnubinutils=$LTS_gnubinutils
+    gnugdb=$LTS_gnugdb
+    if [ $useltsheaders -eq 1 ];then
+        msp430headers=$LTS_msp430headers
+        msp430libc=$LTS_msp430libc
+    fi
+fi
+mspgcc_file="$mspgcc.tar.bz2"
+mspgcc_link="http://sourceforge.net/projects/mspgcc/files/mspgcc/$mspgcc_linkpref/download"
+msp430headers_file="$msp430headers.tar.bz2"
+msp430headers_link="http://sourceforge.net/projects/mspgcc/files/msp430mcu/$msp430headers_file/download"
+msp430libc_file="$msp430libc.tar.bz2"
+msp430libc_link="http://sourceforge.net/projects/mspgcc/files/msp430-libc/$msp430libc_file/download"
+gnugcc_file="$gnugcc.tar.bz2"
+gnugcc_link="http://ftp.gnu.org/gnu/gcc/$gnugcc/$gnugcc_file"
+gnubinutils_file="$gnubinutils.tar.bz2"
+gnubinutils_link="http://ftp.gnu.org/gnu/binutils/$gnubinutils_file"
+gnugdb_file="$gnugdb.tar.bz2"
+gnugdb_link="http://ftp.gnu.org/gnu/gdb/$gnugdb_file"
+mspdebug_file="$mspdebug.tar.gz"
+mspdebug_link="http://sourceforge.net/projects/mspdebug/files/$mspdebug_file/download"
+gnugcc_patch_link="http://sourceforge.net/projects/mspgcc/files/Patches/$gnugcc_patch_linkpref/download"
+gnubinutils_patch_link="http://sourceforge.net/projects/mspgcc/files/Patches/$gnubinutils_patch_linkpref/download"
+gnugdb_patch_link="http://sourceforge.net/projects/mspgcc/files/Patches/$gnugdb_patch_linkpref/download"
+# Setup Dirs
+echo
+echo "Seting up directories.."
+echo "In :`pwd`"
+echo
+rdir="`pwd`"
+ddir="`pwd`/temp"
+mspgccdir="$ddir/$mspgcc"
+msp430headersdir="$ddir/$msp430headers"
+msp430libcdir="$ddir/$msp430libc"
+gnugccdir="$ddir/$gnugcc"
+gnubinutilsdir="$ddir/$gnubinutils"
+gnugdbdir="$ddir/$gnugdb"
+mspdebugdir="$ddir/$mspdebug"
+# Create the path if it does not exits
+if [ -d "./temp" ];then    
+    echo
+    echo "Removing older files"
+    echo
+    cd $ddir
+    find . -maxdepth 1 -type d -name 'mspgcc*' -exec rm -rfv {} +
+    find . -maxdepth 1 -type d -name 'msp430mcu*' -exec rm -rfv {} +
+    find . -maxdepth 1 -type d -name 'msp430-libc*' -exec rm -rfv {} +
+    find . -maxdepth 1 -type d -name 'binutils*' -exec rm -rfv {} +
+    find . -maxdepth 1 -type d -name 'gcc*' -exec rm -rfv {} +
+    find . -maxdepth 1 -type d -name 'gdb*' -exec rm -rfv {} +
+    find . -maxdepth 1 -type d -name 'mspdebug*' -exec rm -rfv {} +
+    cd $rdir
+    echo
+else
+    mkdir ./temp
+fi
+
+# Inform user about the Directories
+echo "Base Directory: "
+echo $rdir
+echo
+echo "Temp/Download/Build Directory: "
+echo $ddir
+echo
+
+# Load compile time dependencies
+if [ $buildtime -eq 1 ];then
+    echo "Installing Dependecies: (Will need Super user permissions)"
+    echo $build_dependencies
+    sudo apt-get update
+    sudo apt-get install $build_dependencies
+    sudo apt-get -f install 
+fi
+
+#Download GCC Patch MSP430GCC
+echo
+echo "Now downloading latest patch for GCC to build MSP430GCC"
+echo $mspgcc_link
+echo
+echo "Going to temp directory for download"
+echo
+cd $ddir
+echo "Starting Download"
+echo
+wget -t inf -c -O $mspgcc_file $mspgcc_link
+echo
+echo "Extract File: $mspgcc_file"
+echo
+tar -jxvf $mspgcc_file
+mspgccdir="`find . -maxdepth 1 -type d -name 'mspgcc*'`"
+mspgccdir="$ddir/$mspgccdir"
+echo
+
+#Create the subcomponent vars if user agreees
+if [ $headerlatest -eq 0 -a $lts -eq 0 ];then
+    echo "Configuring the libc and MSP430 headers as per the archive"
+    echo
+    cd $mspgccdir
+    msp430headers="msp430mcu-`cat msp430mcu.version`"
+    msp430headers_file="$msp430headers.tar.bz2"
+    msp430headers_link="http://sourceforge.net/projects/mspgcc/files/msp430mcu/$msp430headers_file/download"
+    msp430headersdir="$ddir/$msp430headers"
+
+    msp430libc="msp430-libc-`cat msp430-libc.version`"
+    msp430libc_file="$msp430libc.tar.bz2"
+    msp430libc_link="http://sourceforge.net/projects/mspgcc/files/msp430-libc/$msp430libc_file/download"
+    msp430libcdir="$ddir/$msp430libc"
+fi
+
+#Download the MSP430 Headers
+echo
+echo "Now Downloading MS430 Headers"
+echo $msp430headers_link
+echo
+cd $ddir
+wget -t inf -c -O $msp430headers_file $msp430headers_link
+echo
+echo "Extract File: $msp430headers_file"
+echo
+tar -jxvf $msp430headers_file
+msp430headersdir="`find . -maxdepth 1 -type d -name 'msp430mcu*'`"
+msp430headersdir="$ddir/$msp430headersdir"
+echo
+
+#Download Libc for MSP430
+echo "Now Downloading Libc for MSP430"
+echo $msp430libc_link
+echo
+cd $ddir
+wget -t inf -c -O $msp430libc_file $msp430libc_link 
+echo
+echo "Extract File: $msp430libc_file"
+echo
+tar -jxvf $msp430libc_file
+msp430libcdir="`find . -maxdepth 1 -type d -name 'msp430-libc*'`"
+msp430libcdir="$ddir/$msp430libcdir"
+echo
+
+# Download Binutils
+echo
+echo "Now Downloading binutils"
+echo $gnubinutils_link
+echo
+cd $ddir
+wget -t inf -c -O $gnubinutils_file $gnubinutils_link
+echo
+echo "Extract File: $gnubinutils_file"
+echo
+tar -jxvf $gnubinutils_file
+gnubinutilsdir="`find . -maxdepth 1 -type d -name 'binutils*'`"
+gnubinutilsdir="$ddir/$gnubinutilsdir"
+echo
+
+# Download GCC
+echo 
+echo "Now Downloading GCC"
+echo $gnugcc_link
+echo
+cd $ddir
+wget -t inf -c -O $gnugcc_file $gnugcc_link
+echo
+echo "Extract File: $gnugcc_file"
+echo
+tar -jxvf $gnugcc_file
+gnugccdir="`find . -maxdepth 1 -type d -name 'gcc*'`"
+gnugccdir="$ddir/$gnugccdir"
+echo
+
+# Downloading GDB
+echo
+echo "Now Downloading gdb"
+echo $gnugdb_link
+echo
+cd $ddir
+wget -t inf -c -O $gnugdb_file $gnugdb_link
+echo
+echo "Extract File: $gnugdb_file"
+echo
+tar -jxvf $gnugdb_file
+gnugdbdir="`find . -maxdepth 1 -type d -name 'gdb*'`"
+gnugdbdir="$ddir/$gnugdbdir"
+echo
+
+# Downloading Mspdebug
+echo
+echo "Now Downloading Mspdebug"
+echo $mspdebug_link
+echo
+cd $ddir
+wget -t inf -c -O $mspdebug_file $mspdebug_link
+echo
+echo "Extract File: $mspdebug_file"
+echo
+tar -zxvf $mspdebug_file
+mspdebugdir="`find . -maxdepth 1 -type d -name 'mspdebug*'`"
+mspdebugdir="$ddir/$mspdebugdir"
+echo
+
+# Applying Patches for binutils and gdb
+echo 
+echo "Applying patch to binutils"
+echo
+cd $gnubinutilsdir
+pth="`ls -1 $mspgccdir/msp430-binutils*.patch`"
+patch -p1 < $pth
+echo 
+echo "Applying patch to gdb"
+echo
+cd $gnugdbdir
+pth="`ls -1 $mspgccdir/msp430-gdb*.patch`"
+patch -p1 < $pth
+
+# Download prerequsites and apply patch for gcc
+echo
+echo "Downloading GCC pre-requsites"
+echo 
+cd $gnugccdir
+./contrib/download_prerequisites
+echo
+echo "Applying patch to gcc"
+echo
+pth="`ls -1 $mspgccdir/msp430-gcc*.patch`"
+patch -p1 < $pth
+
+# Set build location
+echo
+echo "Setting Build location to: "
+echo $installtarget
+echo
+export PREFIX=$installtarget
+
+# Build Binutils
+echo
+echo "Building Binutils"
+echo
+cd $gnubinutilsdir
+configure --prefix=$PREFIX --target=msp430 --program-prefix="msp430-"
+make
+make install
+echo
+
+# Building GCC
+echo
+echo "Building GCC"
+echo
+cd $gnugccdir
+configure --prefix=$PREFIX --target=msp430 --enable-languages=c,c++ --program-prefix="msp430-"
+make
+make install
+echo
+
+# Building GDB
+echo
+echo "Building GDB"
+echo
+cd $gnugdbdir
+configure --prefix=$PREFIX --target=msp430 --program-prefix="msp430-"
+make
+make install
+echo
+
+# Installing the Headers
+echo
+echo "Installing the MSP430 Headers"
+echo
+cd $msp430headersdir
+export MSP430MCU_ROOT=`pwd`
+./scripts/install.sh $PREFIX
+
+# Compile Libc
+echo
+echo "Compileing the MSP430 libc"
+echo
+cd $msp430libcdir
+export PATH=$PATH:$PREFIX
+cd src
+make PREFIX=${PREFIX} install
+
+# Build mspdebug
+echo
+echo "Building mspdebug"
+echo
+cd $mspdebugdir
+make
+make install 
+
+# Set Path
+echo "#Added MSP430 GCC Path" >> $HOME/.bashrc
+echo "PATH=$PATH:${PREFIX}/bin" >> $HOME/.bashrc
+source ~/.bashrc
+
+
+#Go back to the root
+cd $rdir
+
+
+
+#cd ..
+
+#echo
+#echo
